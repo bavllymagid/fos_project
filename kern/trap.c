@@ -524,7 +524,7 @@ void page_fault_handler(struct Env *curenv, uint32 fault_va)
 		placeSC(curenv, fault_va);
 	}
 
-	if (curenv->ActiveListSize > LIST_SIZE(&(curenv->ActiveList)))
+	if (curenv->ActiveListSize > LIST_SIZE(&(curenv->ActiveList))  && LIST_SIZE(&(curenv->SecondList)) == 0)
 	{
 		placeAL(curenv, fault_va);
 	}
