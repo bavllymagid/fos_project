@@ -504,7 +504,7 @@ void page_fault_handler(struct Env *curenv, uint32 fault_va)
 		}
 	}
 
-	if (curenv->SecondListSize == LIST_SIZE(&(curenv->SecondList)))
+	if (curenv->SecondListSize == LIST_SIZE(&(curenv->SecondList)) && LIST_SIZE(&(curenv->SecondList)) != 0)
 	{
 		struct WorkingSetElement *temp = LIST_LAST(&(curenv->SecondList));
 		uint32 cur_permission = pt_get_page_permissions(curenv, temp->virtual_address);
