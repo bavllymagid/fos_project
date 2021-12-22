@@ -764,22 +764,16 @@ int loadtime_map_frame(uint32 *ptr_page_directory, struct Frame_Info *ptr_frame_
 
 // [1] allocateMem
 
+
 void allocateMem(struct Env* e, uint32 virtual_address, uint32 size)
 {
-	//TODO: [PROJECT 2021 - [2] User Heap] allocateMem() [Kernel Side]
-	// Write your code here, remove the panic and write your code
-	//panic("allocateMem() is not implemented yet...!!");
-	uint32 required_pages = ROUNDUP(size, PAGE_SIZE) / PAGE_SIZE;
-	virtual_address = ROUNDDOWN(virtual_address, PAGE_SIZE);
-	for (int i = 0, va = virtual_address; i < required_pages; i++, va += PAGE_SIZE)
-	{
-		pf_add_empty_env_page(e, va, 0);
-	}
-
-	//This function should allocate ALL pages of the required range in the PAGE FILE
-	//and allocate NOTHING in the main memory
+  uint32 required_num_pages = ROUNDUP(size, PAGE_SIZE)/PAGE_SIZE;
+  virtual_address = ROUNDDOWN(virtual_address,PAGE_SIZE);
+  for(int i = 0, va = virtual_address; i < required_num_pages; i++, va += PAGE_SIZE)
+  {
+    pf_add_empty_env_page(e, va, 0);
+  }
 }
-
 
 // [2] freeMem
 
@@ -788,12 +782,68 @@ void freeMem(struct Env* e, uint32 virtual_address, uint32 size)
 
 	//TODO: [PROJECT 2021 - [2] User Heap] freeMem() [Kernel Side]
 	// Write your code here, remove the panic and write your code
-	panic("freeMem() is not implemented yet...!!");
+
 
 	//This function should:
 	//1. Free ALL pages of the given range from the Page File
+	uint32 page_num=ROUNDUP(size, PAGE_SIZE)/PAGE_SIZE;
+	uint32 temp_va=virtual_address;
+	for(int i=0; i<page_num;i++){
+		pf_remove_env_page(e,temp_va);
+		temp_va +=PAGE_SIZE;
+	}
+
 	//2. Free ONLY pages that are resident in the working set from the memory
+	struct WorkingSetElement * elSecond;
+	LIST_FOREACH(elSecond, &e->SecondList){
+		uint32 va = virtual_address + ROUNDUP(size, PAGE_SIZE);
+		if(elSecond->virtual_address >= virtual_address && elSecond->virtual_address < va){
+			unmap_frame(e->env_page_directory,(void*)elSecond->virtual_address);
+			LIST_REMOVE(&e->SecondList, elSecond);
+			elSecond->empty = 1;
+			LIST_INSERT_HEAD(&e->PageWorkingSetList, elSecond);
+		}
+	}
+
+	struct WorkingSetElement * elActive ;
+	LIST_FOREACH(elActive, &e->ActiveList){
+		uint32 va = virtual_address + ROUNDUP(size, PAGE_SIZE);
+		if(elActive->virtual_address >= virtual_address && elActive->virtual_address < va){
+			unmap_frame(e->env_page_directory,(void*)elActive->virtual_address);
+			LIST_REMOVE(&e->ActiveList, elActive);
+			elActive->empty = 1;
+			LIST_INSERT_HEAD(&e->PageWorkingSetList, elActive);
+			if(LIST_SIZE(&e->SecondList) != 0){
+				struct WorkingSetElement *temp  = LIST_LAST(&e->SecondList);
+				LIST_REMOVE(&e->SecondList, temp);
+				LIST_INSERT_HEAD(&e->ActiveList, temp);
+				pt_set_page_permissions(e, temp->virtual_address,PERM_PRESENT | PERM_USER | PERM_WRITEABLE, 0);
+			}
+		}
+	}
+
 	//3. Removes ONLY the empty page tables (i.e. not used) (no pages are mapped in the table)
+	uint32 * ptr_pg = NULL ;
+	uint32 temp  = virtual_address;
+	for(int i=0; i<page_num;i++){
+		get_page_table(e->env_page_directory, (void*) temp, &ptr_pg);
+		if(ptr_pg != NULL){
+			int found = 0;
+			pt_clear_page_table_entry(e, temp);
+			for(int j = 0 ; j < 1024; j++){
+				if(ptr_pg[j] != 0){
+					found = 1 ;
+					break;
+				}
+			}
+			if(!found){
+				unmap_frame(e->env_page_directory, (void*)ptr_pg);
+				pd_clear_page_dir_entry(e, temp);
+			}
+		}
+		temp += PAGE_SIZE;
+	}
+
 }
 
 void __freeMem_with_buffering(struct Env* e, uint32 virtual_address, uint32 size)

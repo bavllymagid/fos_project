@@ -15,22 +15,10 @@
 //==================================================================================//
 //============================ REQUIRED FUNCTIONS ==================================//
 //==================================================================================//
-#define USER_HEAP_SIZE (USER_HEAP_MAX - USER_HEAP_START) / PAGE_SIZE
+#define USER_HEAP_SIZE ((USER_HEAP_MAX - USER_HEAP_START) / PAGE_SIZE)
 
-struct free_space
-{
-	uint32 address;
-	bool present;
-} free_spaces[USER_HEAP_SIZE + 1];
+uint32 allocated_spaces[USER_HEAP_SIZE];
 
-struct allocated
-{
-	uint32 address;
-	uint32 pages;
-	uint32 index;
-} allocated_spaces[USER_HEAP_SIZE + 1];
-
-//int free_index = 0;
 int allocation_counter = 0;
 uint32 alloc_index;
 
@@ -38,9 +26,6 @@ uint32 best_fit(uint32 size)
 {
 	uint32 best_address = -1;
 	uint32 best_allocation_size = USER_HEAP_SIZE + 1;
-	uint32 tmp_address = -1;
-	uint32 tmp_index = -1;
-	alloc_index = -1;
 	uint32 consecutive = 0;
 
 	size = ROUNDUP(size, PAGE_SIZE);
@@ -48,34 +33,24 @@ uint32 best_fit(uint32 size)
 
 	for (int start = 0; start < USER_HEAP_SIZE; start++)
 	{
-		if (free_spaces[start].present)
+		if (allocated_spaces[start] != 0)
 		{
 			if (consecutive >= required_pages && best_allocation_size > consecutive)
 			{
+				best_address = ((start-consecutive) * PAGE_SIZE) + USER_HEAP_START;
 				best_allocation_size = consecutive;
-				best_address = tmp_address;
-				alloc_index = tmp_index;
 			}
-
-			tmp_address = -1;
-			tmp_index = -1;
 			consecutive = 0;
-			continue;
+			start += allocated_spaces[start]-1;
 		}
-
-		if (!consecutive)
-		{
-			tmp_address = (start * PAGE_SIZE) + USER_HEAP_START;
-			tmp_index = start;
+		else{
+			consecutive++;
 		}
-		consecutive++;
-
 	}
 
 	if (consecutive >= required_pages && best_allocation_size > consecutive)
 	{
-		best_address = tmp_address;
-		alloc_index = tmp_index;
+		best_address = ((USER_HEAP_SIZE - consecutive)*PAGE_SIZE) + USER_HEAP_START;
 	}
 
 	return best_address;
@@ -102,18 +77,13 @@ void* malloc(uint32 size)
 		return NULL;
 	}
 
+
 	sys_allocateMem(best_address, size);
 
-	for (int i = 0, alloc = alloc_index; i < required_pages; i++, alloc++)
-	{
-		free_spaces[alloc].present = 1;
-		free_spaces[alloc].address = best_address;
-	}
+	allocation_counter = ( best_address - USER_HEAP_START)/PAGE_SIZE;
+	allocated_spaces[allocation_counter] = required_pages;
 
-	allocated_spaces[allocation_counter].address = best_address;
-	allocated_spaces[allocation_counter].index = alloc_index;
-	allocated_spaces[allocation_counter].pages = required_pages;
-	allocation_counter++;
+
 
 	return (void*) best_address;
 }
@@ -130,13 +100,17 @@ void* malloc(uint32 size)
 
 void free(void* virtual_address)
 {
-	//TODO: [PROJECT 2021 - [2] User Heap] free() [User Side]
-	// Write your code here, remove the panic and write your code
-	panic("free() is not implemented yet...!!");
+    //TODO: [PROJECT 2021 - [2] User Heap] free() [User Side]
+    // Write your code here, remove the panic and write your code
+    //panic("free() is not implemented yet...!!");
+    int index = (USER_HEAP_START + (uint32)virtual_address)/PAGE_SIZE;
 
-	//you should get the size of the given allocation using its address
+    sys_freeMem((uint32) virtual_address, allocated_spaces[index]*PAGE_SIZE);
 
-	//refer to the project presentation and documentation for details
+    allocated_spaces[index] = 0 ;
+    //you should get the size of the given allocation using its address
+
+    //refer to the project presentation and documentation for details
 }
 
 //==================================================================================//
