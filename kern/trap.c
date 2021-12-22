@@ -497,9 +497,9 @@ void page_fault_handler(struct Env *curenv, uint32 fault_va)
 			LIST_REMOVE(&(curenv->ActiveList), temp);
 			LIST_REMOVE(&(curenv->SecondList), el);
 			LIST_INSERT_HEAD(&(curenv->SecondList), temp);
-			pt_set_page_permissions(curenv, temp->virtual_address, 0, PERM_PRESENT);
+			pt_set_page_permissions(curenv, temp->virtual_address, 0, PERM_PRESENT | PERM_USER | PERM_WRITEABLE);
 			LIST_INSERT_HEAD(&(curenv->ActiveList), el);
-			pt_set_page_permissions(curenv, el->virtual_address, PERM_PRESENT, 0);
+			pt_set_page_permissions(curenv, el->virtual_address, PERM_PRESENT | PERM_USER | PERM_WRITEABLE, 0);
 			return;
 		}
 	}
@@ -561,7 +561,7 @@ void placeAL(struct Env *curenv, uint32 fault_va)
 	el->virtual_address = fault_va;
 	LIST_REMOVE(&(curenv->PageWorkingSetList), el);
 	LIST_INSERT_HEAD(&(curenv->ActiveList), el);
-	pt_set_page_permissions(curenv, fault_va, PERM_PRESENT | PERM_WRITEABLE, 0);
+	pt_set_page_permissions(curenv, fault_va, PERM_PRESENT | PERM_USER | PERM_WRITEABLE, 0);
 }
 
 void placeSC(struct Env *curenv, uint32 fault_va)
