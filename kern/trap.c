@@ -504,6 +504,26 @@ void page_fault_handler(struct Env *curenv, uint32 fault_va)
 		}
 	}
 
+	if(LIST_SIZE(&(curenv->SecondList)) == 0){
+		struct WorkingSetElement *temp = LIST_LAST(&(curenv->ActiveList));
+		uint32 cur_permission = pt_get_page_permissions(curenv, temp->virtual_address);
+
+		if (cur_permission & PERM_MODIFIED)
+		{
+			uint32 *pt_pg_tb = NULL;
+			struct Frame_Info *ft = get_frame_info(curenv->env_page_directory, (void *)temp->virtual_address, &pt_pg_tb);
+			pf_update_env_page(curenv, (void *)temp->virtual_address, ft);
+		}
+
+		unmap_frame(curenv->env_page_directory, (void *)temp->virtual_address);
+		pt_set_page_permissions(curenv, temp->virtual_address, 0, PERM_PRESENT | PERM_USER | PERM_WRITEABLE);
+		LIST_REMOVE(&(curenv->ActiveList), temp);
+		LIST_INSERT_HEAD(&(curenv->PageWorkingSetList), temp);
+
+		placeAL(curenv, fault_va);
+	}
+
+
 	if (curenv->SecondListSize == LIST_SIZE(&(curenv->SecondList)) && LIST_SIZE(&(curenv->SecondList)) != 0)
 	{
 		struct WorkingSetElement *temp = LIST_LAST(&(curenv->SecondList));
