@@ -768,7 +768,6 @@ int loadtime_map_frame(uint32 *ptr_page_directory, struct Frame_Info *ptr_frame_
 void allocateMem(struct Env* e, uint32 virtual_address, uint32 size)
 {
   uint32 required_num_pages = ROUNDUP(size, PAGE_SIZE)/PAGE_SIZE;
-  virtual_address = ROUNDDOWN(virtual_address,PAGE_SIZE);
   for(int i = 0, va = virtual_address; i < required_num_pages; i++, va += PAGE_SIZE)
   {
     pf_add_empty_env_page(e, va, 0);
@@ -794,17 +793,6 @@ void freeMem(struct Env* e, uint32 virtual_address, uint32 size)
 	}
 
 	//2. Free ONLY pages that are resident in the working set from the memory
-	struct WorkingSetElement * elSecond;
-	LIST_FOREACH(elSecond, &e->SecondList){
-		uint32 va = virtual_address + ROUNDUP(size, PAGE_SIZE);
-		if(elSecond->virtual_address >= virtual_address && elSecond->virtual_address < va){
-			unmap_frame(e->env_page_directory,(void*)elSecond->virtual_address);
-			LIST_REMOVE(&e->SecondList, elSecond);
-			elSecond->empty = 1;
-			LIST_INSERT_HEAD(&e->PageWorkingSetList, elSecond);
-		}
-	}
-
 	struct WorkingSetElement * elActive ;
 	LIST_FOREACH(elActive, &e->ActiveList){
 		uint32 va = virtual_address + ROUNDUP(size, PAGE_SIZE);
@@ -814,22 +802,17 @@ void freeMem(struct Env* e, uint32 virtual_address, uint32 size)
 			elActive->empty = 1;
 			LIST_INSERT_HEAD(&e->PageWorkingSetList, elActive);
 			if(LIST_SIZE(&e->SecondList) != 0){
-				struct WorkingSetElement *temp  = LIST_LAST(&e->SecondList);
+				struct WorkingSetElement *temp  = LIST_FIRST(&e->SecondList);
 				LIST_REMOVE(&e->SecondList, temp);
-				LIST_INSERT_HEAD(&e->ActiveList, temp);
+				LIST_INSERT_TAIL(&e->ActiveList, temp);
 				pt_set_page_permissions(e, temp->virtual_address,PERM_PRESENT | PERM_USER | PERM_WRITEABLE, 0);
 			}
-		}
-	}
 
-	//3. Removes ONLY the empty page tables (i.e. not used) (no pages are mapped in the table)
-	uint32 * ptr_pg = NULL ;
-	uint32 temp  = virtual_address;
-	for(int i=0; i<page_num;i++){
-		get_page_table(e->env_page_directory, (void*) temp, &ptr_pg);
-		if(ptr_pg != NULL){
+			uint32 * ptr_pg = NULL ;
+			get_page_table(e->env_page_directory, (void*)elActive->virtual_address, &ptr_pg);
 			int found = 0;
-			pt_clear_page_table_entry(e, temp);
+			uint32 d_index = PDX(elActive->virtual_address);
+			struct Frame_Info * fi = to_frame_info(e->env_page_directory[d_index] & 0xFFFFF000);
 			for(int j = 0 ; j < 1024; j++){
 				if(ptr_pg[j] != 0){
 					found = 1 ;
@@ -837,12 +820,61 @@ void freeMem(struct Env* e, uint32 virtual_address, uint32 size)
 				}
 			}
 			if(!found){
-				unmap_frame(e->env_page_directory, (void*)ptr_pg);
-				pd_clear_page_dir_entry(e, temp);
+				free_frame(fi);
+				pd_clear_page_dir_entry(e, elActive->virtual_address);
 			}
 		}
-		temp += PAGE_SIZE;
 	}
+
+	struct WorkingSetElement * elSecond;
+	LIST_FOREACH(elSecond, &e->SecondList){
+		uint32 va = virtual_address + ROUNDUP(size, PAGE_SIZE);
+		if(elSecond->virtual_address >= virtual_address && elSecond->virtual_address < va){
+			unmap_frame(e->env_page_directory,(void*)elSecond->virtual_address);
+			LIST_REMOVE(&e->SecondList, elSecond);
+			elSecond->empty = 1;
+			LIST_INSERT_TAIL(&e->PageWorkingSetList, elSecond);
+
+			uint32 * ptr_pg = NULL ;
+			get_page_table(e->env_page_directory, (void*)elSecond->virtual_address, &ptr_pg);
+			int found = 0;
+			uint32 d_index = PDX(elSecond->virtual_address);
+			struct Frame_Info * fi = to_frame_info(e->env_page_directory[d_index] & 0xFFFFF000);
+			for(int j = 0 ; j < 1024; j++){
+				if(ptr_pg[j] != 0){
+					found = 1 ;
+					break;
+				}
+			}
+
+			if(!found){
+				free_frame(fi);
+				pd_clear_page_dir_entry(e, elSecond->virtual_address);
+			}
+		}
+	}
+
+	//3. Removes ONLY the empty page tables (i.e. not used) (no pages are mapped in the table)
+//	uint32 * ptr_pg = NULL ;
+//	uint32 temp  = virtual_address;
+//	for(int i=0; i<page_num;i++){
+//		struct Frame_Info * fi = get_frame_info(e->env_page_directory, (void*) temp, &ptr_pg);
+//		if(ptr_pg != NULL){
+//			int found = 0;
+//			pt_clear_page_table_entry(e, temp);
+//			for(int j = 0 ; j < 1024; j++){
+//				if(ptr_pg[j] != 0){
+//					found = 1 ;
+//					break;
+//				}
+//			}
+//			if(!found){
+//				free_frame(fi);
+//				pd_clear_page_dir_entry(e, temp);
+//			}
+//		}
+//		temp += PAGE_SIZE;
+//	}
 
 }
 

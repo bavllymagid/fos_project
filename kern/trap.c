@@ -485,6 +485,30 @@ void page_fault_handler(struct Env *curenv, uint32 fault_va)
 	// Write your code here, remove the panic and write your code
 	//to start from the start of the page
 	fault_va = ROUNDDOWN(fault_va, PAGE_SIZE);
+	//cprintf("%x\n", fault_va);
+	//print_page_working_set_or_LRUlists(curenv);
+
+
+	if(curenv->SecondListSize == 0 && curenv->ActiveListSize == LIST_SIZE(&(curenv->ActiveList))){
+		//cprintf("i'mhere\n");
+			struct WorkingSetElement *temp = LIST_LAST(&(curenv->ActiveList));
+			uint32 cur_permission = pt_get_page_permissions(curenv, temp->virtual_address);
+
+			if (cur_permission & PERM_MODIFIED)
+			{
+				uint32 *pt_pg_tb = NULL;
+				struct Frame_Info *ft = get_frame_info(curenv->env_page_directory, (void *)temp->virtual_address, &pt_pg_tb);
+				pf_update_env_page(curenv, (void *)temp->virtual_address, ft);
+			}
+
+			unmap_frame(curenv->env_page_directory, (void *)temp->virtual_address);
+			pt_set_page_permissions(curenv, temp->virtual_address, 0, PERM_PRESENT | PERM_USER | PERM_WRITEABLE);
+			LIST_REMOVE(&(curenv->ActiveList), temp);
+			LIST_INSERT_HEAD(&(curenv->PageWorkingSetList), temp);
+			placeAL(curenv, fault_va);
+			return;
+		}
+
 
 	//Checking if the address inside second list
 	struct WorkingSetElement *el;
@@ -504,27 +528,9 @@ void page_fault_handler(struct Env *curenv, uint32 fault_va)
 		}
 	}
 
-	if(LIST_SIZE(&(curenv->SecondList)) == 0){
-		struct WorkingSetElement *temp = LIST_LAST(&(curenv->ActiveList));
-		uint32 cur_permission = pt_get_page_permissions(curenv, temp->virtual_address);
 
-		if (cur_permission & PERM_MODIFIED)
-		{
-			uint32 *pt_pg_tb = NULL;
-			struct Frame_Info *ft = get_frame_info(curenv->env_page_directory, (void *)temp->virtual_address, &pt_pg_tb);
-			pf_update_env_page(curenv, (void *)temp->virtual_address, ft);
-		}
-
-		unmap_frame(curenv->env_page_directory, (void *)temp->virtual_address);
-		pt_set_page_permissions(curenv, temp->virtual_address, 0, PERM_PRESENT | PERM_USER | PERM_WRITEABLE);
-		LIST_REMOVE(&(curenv->ActiveList), temp);
-		LIST_INSERT_HEAD(&(curenv->PageWorkingSetList), temp);
-
-		placeAL(curenv, fault_va);
-	}
-
-
-	if (curenv->SecondListSize == LIST_SIZE(&(curenv->SecondList)) && LIST_SIZE(&(curenv->SecondList)) != 0)
+	//victim
+	if (curenv->SecondListSize == LIST_SIZE(&(curenv->SecondList)) && curenv->SecondListSize != 0)
 	{
 		struct WorkingSetElement *temp = LIST_LAST(&(curenv->SecondList));
 		uint32 cur_permission = pt_get_page_permissions(curenv, temp->virtual_address);
@@ -544,11 +550,11 @@ void page_fault_handler(struct Env *curenv, uint32 fault_va)
 		placeSC(curenv, fault_va);
 	}
 
-	if (curenv->ActiveListSize > LIST_SIZE(&(curenv->ActiveList))  && LIST_SIZE(&(curenv->SecondList)) == 0)
+	if (curenv->ActiveListSize > LIST_SIZE(&(curenv->ActiveList)))
 	{
 		placeAL(curenv, fault_va);
 	}
-	else if (curenv->SecondListSize > LIST_SIZE(&(curenv->SecondList)))
+	else if (curenv->SecondListSize > LIST_SIZE(&(curenv->SecondList)) )
 	{
 		placeSC(curenv, fault_va);
 	}
@@ -578,6 +584,7 @@ void placeAL(struct Env *curenv, uint32 fault_va)
 			panic("Invalid Access");
 	}
 	struct WorkingSetElement *el = LIST_LAST(&(curenv->PageWorkingSetList));
+	el->empty = 0 ;
 	el->virtual_address = fault_va;
 	LIST_REMOVE(&(curenv->PageWorkingSetList), el);
 	LIST_INSERT_HEAD(&(curenv->ActiveList), el);

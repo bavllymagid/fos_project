@@ -84,7 +84,7 @@ void* malloc(uint32 size)
 	allocated_spaces[allocation_counter] = required_pages;
 
 
-
+    //cprintf("%x\n", best_address);
 	return (void*) best_address;
 }
 
