@@ -21,6 +21,7 @@ uint32 allocated_spaces[USER_HEAP_SIZE];
 
 int allocation_counter = 0;
 uint32 alloc_index;
+uint32 last_place = -1;
 
 uint32 best_fit(uint32 size)
 {
@@ -46,6 +47,16 @@ uint32 best_fit(uint32 size)
 		else{
 			consecutive++;
 		}
+
+		int index = ((last_place-USER_HEAP_START)/PAGE_SIZE)+consecutive;
+
+		if(index == start){
+			start += allocated_spaces[start];
+			best_address = ((start-consecutive) * PAGE_SIZE) + USER_HEAP_START;
+			best_allocation_size = consecutive;
+			break;
+		}
+
 	}
 
 	if (consecutive >= required_pages && best_allocation_size > consecutive)
@@ -53,6 +64,9 @@ uint32 best_fit(uint32 size)
 		best_address = ((USER_HEAP_SIZE - consecutive)*PAGE_SIZE) + USER_HEAP_START;
 	}
 
+	if(best_address < last_place){
+		last_place = best_address;
+	}
 	return best_address;
 }
 
